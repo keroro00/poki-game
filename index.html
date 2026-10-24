@@ -314,7 +314,7 @@
         let lastFrameTime = null;
         let nextMeteorFrame = 80;
         let nextEnergyCellFrame = 500;
-        let backgroundGameInterval = null;
+        let countdownTimer = null;
 
         let highData = JSON.parse(localStorage.getItem('stellarDrift_highData')) || { score: 0, time: 0 };
 
@@ -458,16 +458,19 @@
             let count = 3;
             textEl.innerText = count;
 
-            const timer = setInterval(() => {
+            countdownTimer = setInterval(() => {
                 count--;
                 if (count > 0) {
                     textEl.innerText = count;
                 } else if (count === 0) {
                     textEl.innerText = "GO!";
                 } else {
-                    clearInterval(timer);
+                    clearInterval(countdownTimer);
+                    countdownTimer = null;
                     overlay.classList.add('hidden');
-                    callback();
+                    if (gameState === 'COUNTDOWN') {
+                        callback();
+                    }
                 }
             }, 800);
         }
@@ -536,10 +539,6 @@
 
         function gameOver() {
             gameState = 'GAMEOVER';
-            if (backgroundGameInterval !== null) {
-                clearInterval(backgroundGameInterval);
-                backgroundGameInterval = null;
-            }
             stopBGM();
             const finalScoreVal = Math.floor(score);
             const finalTimeVal = pausedTimeElapsed;
@@ -628,6 +627,10 @@
 
         function loop(timestamp) {
             if (gameState !== 'PLAYING') return;
+            if (document.hidden || !document.hasFocus()) {
+                endGameOnFocusLoss();
+                return;
+            }
 
             const deltaFrames = lastFrameTime === null
                 ? 1
@@ -808,27 +811,25 @@
             }
         }
 
+        function endGameOnFocusLoss() {
+            if (gameState === 'PLAYING' || gameState === 'COUNTDOWN') {
+                if (countdownTimer !== null) {
+                    clearInterval(countdownTimer);
+                    countdownTimer = null;
+                    document.getElementById('countdownOverlay').classList.add('hidden');
+                }
+                gameOver();
+            }
+        }
+
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                lastFrameTime = performance.now();
-                if (gameState === 'PLAYING' && backgroundGameInterval === null) {
-                    backgroundGameInterval = setInterval(() => {
-                        if (gameState === 'PLAYING') {
-                            loop(performance.now());
-                        }
-                    }, 100);
-                }
-            } else {
-                if (backgroundGameInterval !== null) {
-                    clearInterval(backgroundGameInterval);
-                    backgroundGameInterval = null;
-                }
-                lastFrameTime = performance.now();
-                if (gameState === 'PLAYING') {
-                    requestAnimationFrame(loop);
-                }
+                endGameOnFocusLoss();
             }
         });
+        window.addEventListener('blur', endGameOnFocusLoss);
+        window.addEventListener('pagehide', endGameOnFocusLoss);
+        document.addEventListener('freeze', endGameOnFocusLoss);
 
         window.addEventListener('load', () => {
             if (window.PokiSDK) {
