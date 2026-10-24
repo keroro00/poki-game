@@ -191,11 +191,36 @@
             gap: 10px;
         }
         .hud-sub {
-            font-size: 0.7rem;
+            font-size: 1.5rem;
             color: #f43f5e;
         }
         #timerVal {
             color: #38bdf8;
+        }
+        #muteButton {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid #38bdf8;
+            border-radius: 6px;
+            color: #ffffff;
+            cursor: pointer;
+        }
+        #muteButton svg {
+            display: block;
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+        #muteButton:hover {
+            background: #0284c7;
+        }
+        @media (max-width: 480px) {
+            #muteButton {
+                font-size: 0.5rem;
+            }
         }
     </style>
     <script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>
@@ -214,6 +239,9 @@
             <div class="hud-sub" id="hpVal">❤️❤️❤️</div>
         </div>
         <div class="hud-group" style="font-size: 0.75rem;">
+            <button id="muteButton" class="interactive" type="button" aria-label="Mute audio" title="Mute audio" aria-pressed="false" onclick="toggleMute()">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3zm13.5 3a3.5 3.5 0 0 0-2-3.16v6.31a3.5 3.5 0 0 0 2-3.15zM14.5 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/></svg>
+            </button>
             <span>Time <span id="timerVal">0</span>s</span>
         </div>
     </div>
@@ -299,6 +327,16 @@
 
         let audioCtx = null;
         let bgmInterval = null;
+        let isMuted = false;
+
+        function toggleMute() {
+            isMuted = !isMuted;
+            const muteButton = document.getElementById('muteButton');
+            muteButton.innerHTML = isMuted
+                ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3zm13.59 3 2.7 2.71-1.41 1.41-2.71-2.7-2.7 2.7-1.42-1.41 2.71-2.71-2.71-2.7 1.42-1.42 2.7 2.71 2.71-2.71 1.41 1.42L16.59 12z"/></svg>'
+                : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3zm13.5 3a3.5 3.5 0 0 0-2-3.16v6.31a3.5 3.5 0 0 0 2-3.15zM14.5 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/></svg>';
+            muteButton.setAttribute('aria-pressed', String(isMuted));
+        }
 
         function startBGM() {
             if (!audioCtx) {
@@ -314,7 +352,7 @@
             let step = 0;
 
             bgmInterval = setInterval(() => {
-                if (gameState !== 'PLAYING') return;
+                if (gameState !== 'PLAYING' || isMuted) return;
 
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
@@ -348,7 +386,7 @@
         }
 
         function playClickSound() {
-            if (!audioCtx) return;
+            if (!audioCtx || isMuted) return;
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'sine';
@@ -363,7 +401,7 @@
         }
 
         function playBatterySound() {
-            if (!audioCtx) return;
+            if (!audioCtx || isMuted) return;
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'triangle';
@@ -378,7 +416,7 @@
         }
 
         function playCrashSound() {
-            if (!audioCtx) return;
+            if (!audioCtx || isMuted) return;
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'square';
