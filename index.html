@@ -307,10 +307,13 @@
         let energyCells = [];  
         let floatTexts = [];
         let frameCount = 0;
-        let gameStartTime = 0;
+        let gameElapsedMs = 0;
         let pausedTimeElapsed = 0;
         let hasRevived = false;
         let invulnerableTimer = 0;
+        let lastFrameTime = null;
+        let nextMeteorFrame = 80;
+        let nextEnergyCellFrame = 500;
 
         let highData = JSON.parse(localStorage.getItem('stellarDrift_highData')) || { score: 0, time: 0 };
 
@@ -476,12 +479,16 @@
             energyCells = [];
             floatTexts = [];
             frameCount = 0;
+            gameElapsedMs = 0;
             drone.angle = 0;
             drone.speed = drone.baseSpeed;
             inputDirection = 1;
             hasRevived = false;
             invulnerableTimer = 0;
             pausedTimeElapsed = 0;
+            lastFrameTime = null;
+            nextMeteorFrame = 80;
+            nextEnergyCellFrame = 500;
             document.getElementById('scoreVal').innerText = '0';
             document.getElementById('timerVal').innerText = '0';
         }
@@ -495,10 +502,10 @@
             resetVariablesForNewGame();
 
             runCountdown(() => {
-                gameStartTime = Date.now();
                 gameState = 'PLAYING';
                 startBGM();
-                loop();
+                lastFrameTime = null;
+                requestAnimationFrame(loop);
             });
         }
 
@@ -519,10 +526,10 @@
             resetVariablesForNewGame();
 
             runCountdown(() => {
-                gameStartTime = Date.now();
                 gameState = 'PLAYING';
                 startBGM();
-                loop();
+                lastFrameTime = null;
+                requestAnimationFrame(loop);
             });
         }
 
@@ -579,10 +586,10 @@
             invulnerableTimer = 60;
 
             runCountdown(() => {
-                gameStartTime = Date.now() - (pausedTimeElapsed * 1000);
                 gameState = 'PLAYING';
                 startBGM();
-                loop();
+                lastFrameTime = null;
+                requestAnimationFrame(loop);
             });
         }
 
@@ -614,15 +621,20 @@
             });
         }
 
-        function loop() {
+        function loop(timestamp) {
             if (gameState !== 'PLAYING') return;
 
-            frameCount++;
-            score += 0.1;
+            const deltaFrames = lastFrameTime === null
+                ? 1
+                : (timestamp - lastFrameTime) / (1000 / 60);
+            lastFrameTime = timestamp;
 
-            if (invulnerableTimer > 0) invulnerableTimer--;
+            frameCount += deltaFrames;
+            score += 0.1 * deltaFrames;
+            invulnerableTimer = Math.max(0, invulnerableTimer - deltaFrames);
 
-            pausedTimeElapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+            gameElapsedMs += deltaFrames * (1000 / 60);
+            pausedTimeElapsed = Math.floor(gameElapsedMs / 1000);
             const elapsedSeconds = Math.min(60, pausedTimeElapsed);
             
             document.getElementById('scoreVal').innerText = Math.floor(score);
@@ -632,21 +644,24 @@
             drone.speed = drone.baseSpeed + (speedIncreases * 0.004);
 
             if (elapsedSeconds < 10) {
-                if (frameCount % 200 === 0) {
+                if (frameCount >= nextMeteorFrame) {
                     spawnMeteor();
+                    nextMeteorFrame = frameCount + 200;
                 }
             } else {
-                let spawnInterval = Math.max(50, 110 - Math.floor(elapsedSeconds));
-                if (frameCount % spawnInterval === 0) {
+                const spawnInterval = Math.max(50, 110 - Math.floor(elapsedSeconds));
+                if (frameCount >= nextMeteorFrame) {
                     spawnMeteor();
+                    nextMeteorFrame = frameCount + spawnInterval;
                 }
             }
 
-            if (frameCount % 500 === 0) {
+            if (frameCount >= nextEnergyCellFrame) {
                 spawnEnergyCell();
+                nextEnergyCellFrame = frameCount + 500;
             }
 
-            drone.angle += drone.speed * inputDirection;
+            drone.angle += drone.speed * inputDirection * deltaFrames;
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -668,8 +683,8 @@
                 let dy = cell.targetY - cell.y;
                 let dist = Math.hypot(dx, dy);
 
-                cell.x += (dx / dist) * cell.speed;
-                cell.y += (dy / dist) * cell.speed;
+                cell.x += (dx / dist) * cell.speed * deltaFrames;
+                cell.y += (dy / dist) * cell.speed * deltaFrames;
 
                 if (batteryImg.complete && batteryImg.naturalWidth !== 0) {
                     ctx.drawImage(batteryImg, cell.x - cell.width / 2, cell.y - cell.height / 2, cell.width, cell.height);
@@ -702,8 +717,8 @@
 
             for (let i = floatTexts.length - 1; i >= 0; i--) {
                 let ft = floatTexts[i];
-                ft.y += ft.vy;
-                ft.alpha -= 0.015;
+                ft.y += ft.vy * deltaFrames;
+                ft.alpha -= 0.015 * deltaFrames;
 
                 if (ft.alpha <= 0) {
                     floatTexts.splice(i, 1);
@@ -742,9 +757,9 @@
                 let dy = meteor.targetY - meteor.y;
                 let dist = Math.hypot(dx, dy);
 
-                meteor.x += (dx / dist) * meteor.speed;
-                meteor.y += (dy / dist) * meteor.speed;
-                meteor.rotation += 0.02;
+                meteor.x += (dx / dist) * meteor.speed * deltaFrames;
+                meteor.y += (dy / dist) * meteor.speed * deltaFrames;
+                meteor.rotation += 0.02 * deltaFrames;
 
                 ctx.save();
                 ctx.translate(meteor.x, meteor.y);
@@ -785,6 +800,12 @@
 
             requestAnimationFrame(loop);
         }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                lastFrameTime = null;
+            }
+        });
 
         window.addEventListener('load', () => {
             if (window.PokiSDK) {
