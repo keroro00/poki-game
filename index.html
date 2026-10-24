@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Stellar Drift - Space Arcade</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: url('background.jpg') no-repeat center center fixed;
+            background-size: cover;
+            font-family: 'Press Start 2P', monospace, sans-serif;
+            color: #ffffff;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 24px;
+        }
+        .interactive {
+            pointer-events: auto;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 12, 18, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        .start-card {
+            background: #161b22;
+            border: 2px solid #30363d;
+            border-top: 4px solid #38bdf8;
+            padding: 40px 32px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-width: 440px;
+            width: 90%;
+            text-align: center;
+            position: relative; /* 配合右上角隕石定位 */
+            overflow: visible;
+        }
+        /* ☄️ 右上角旋轉大隕石裝飾 */
+        .decor-meteor {
+            position: absolute;
+            top: -35px;
+            right: -35px;
+            width: 80px;
+            height: 80px;
+            animation: meteorSpin 8s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes meteorSpin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            letter-spacing: 1px;
+            color: #38bdf8;
+            margin: 0 0 16px 0;
+            line-height: 1.4;
+        }
+        .start-card p {
+            font-size: 0.65rem;
+            color: #94a3b8;
+            margin: 0 0 16px 0;
+            line-height: 1.5;
+        }
+        .tutorial-text {
+            font-size: 0.6rem;
+            color: #64748b;
+            margin-bottom: 28px;
+            line-height: 1.4;
+        }
+        #countdownOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+        }
+        #countdownText {
+            font-size: 4rem;
+            font-weight: 800;
+            color: #38bdf8;
+        }
+        .gameover-title {
+            color: #f43f5e !important;
+            font-size: 2rem !important;
+            margin-bottom: 20px;
+        }
+        .score-board {
+            background: #161b22;
+            border: 2px solid #30363d;
+            padding: 24px;
+            border-radius: 6px;
+            margin-bottom: 24px;
+            text-align: center;
+            min-width: 300px;
+        }
+        .score-board div {
+            font-size: 0.65rem;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+        .score-board .val-main {
+            color: #ffffff;
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+        .score-board .val-sub {
+            color: #38bdf8;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .btn {
+            background: #0284c7;
+            color: #ffffff;
+            border: none;
+            padding: 16px 24px;
+            font-family: 'Press Start 2P', monospace, sans-serif;
+            font-size: 0.8rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            width: 100%;
+        }
+        .btn:hover {
+            background: #0ea5e9;
+        }
+        .btn-revive {
+            background: #16a34a;
+            width: auto;
+            font-size: 0.75rem;
+        }
+        .btn-revive:hover {
+            background: #22c55e;
+        }
+        .hud-left {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .hud-group {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .hud-sub {
+            font-size: 0.7rem;
+            color: #f43f5e;
+        }
+        #timerVal {
+            color: #38bdf8;
+        }
+    </style>
+    <script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="countdownOverlay" class="hidden">
+        <div id="countdownText">3</div>
+    </div>
+
+    <div id="ui-layer">
+        <div class="hud-left">
+            <div class="hud-group">Score <span id="scoreVal" style="color: #38bdf8;">0</span></div>
+            <div class="hud-sub" id="hpVal">❤️❤️❤️</div>
+        </div>
+        <div class="hud-group" style="font-size: 0.75rem;">
+            <span>Time <span id="timerVal">0</span>s</span>
+        </div>
+    </div>
+
+    <!-- 開始畫面 -->
+    <div id="startScreen" class="screen interactive">
+        <div class="start-card">
+            <!-- 右上角旋轉大隕石 -->
+            <img src="meteor.webp" class="decor-meteor" alt="meteor">
+            
+            <h1>Stellar Drift</h1>
+            <p>Avoid meteors & collect energy cells</p>
+            <div class="tutorial-text">Tap anywhere to shift orbit</div>
+            <button class="btn" onclick="startCountdownAndGame()">Play</button>
+        </div>
+    </div>
+
+    <!-- 結算畫面 -->
+    <div id="gameOverScreen" class="screen interactive hidden">
+        <h1 class="gameover-title">Game Over</h1>
+        
+        <div class="score-board">
+            <div>Final Score</div>
+            <div class="val-main" id="finalScore">0</div>
+            
+            <div>Survival Time</div>
+            <div class="val-main" id="finalTime" style="color: #38bdf8;">0s</div>
+
+            <div>Best Record</div>
+            <div class="val-sub" id="highScoreText">Score: 0 (0s)</div>
+        </div>
+        
+        <button id="reviveBtn" class="btn btn-revive" onclick="watchAdToRevive()">Continue <svg width="18" height="18" viewBox="0 0 640 640" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px;">
+                <path d="M128 128C92.7 128 64 156.7 64 192L64 448C64 483.3 92.7 512 128 512L384 512C419.3 512 448 483.3 448 448L448 192C448 156.7 419.3 128 384 128L128 128zM496 400L569.5 458.8C573.7 462.2 578.9 464 584.3 464C597.4 464 608 453.4 608 440.3L608 199.7C608 186.6 597.4 176 584.3 176C578.9 176 573.7 177.8 569.5 181.2L496 240L496 400z"/>
+            </svg></button>
+        <button class="btn" onclick="restartGame()" style="width: auto; margin-top: 12px; background: #334155; font-size: 0.75rem;">Play Again</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const meteorImg = new Image();
+        meteorImg.src = 'meteor.webp';
+
+        const batteryImg = new Image();
+        batteryImg.src = 'battery.webp';
+
+        const spacemanImg = new Image();
+        spacemanImg.src = 'spaceman.webp';
+
+        let gameState = 'START';
+        let score = 0;
+        let hp = 3;
+        let meteors = [];      
+        let energyCells = [];  
+        let floatTexts = [];
+        let frameCount = 0;
+        let gameStartTime = 0;
+        let pausedTimeElapsed = 0;
+        let hasRevived = false;
+        let invulnerableTimer = 0;
+
+        let highData = JSON.parse(localStorage.getItem('stellarDrift_highData')) || { score: 0, time: 0 };
+
+        let drone = {
+            angle: 0,
+            radius: 80,
+            size: 20,
+            baseSpeed: 0.025,
+            maxSpeed: 0.050,
+            speed: 0.025
+        };
+
+        let inputDirection = 1;
+
+        let audioCtx = null;
+        let bgmInterval = null;
+
+        function startBGM() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            if (bgmInterval) clearInterval(bgmInterval);
+
+            const notes = [110, 164.81, 220, 329.63, 440, 329.63, 220, 164.81];
+            let step = 0;
+
+            bgmInterval = setInterval(() => {
+                if (gameState !== 'PLAYING') return;
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(notes[step % notes.length], audioCtx.currentTime);
+
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(800, audioCtx.currentTime);
+
+                gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.22);
+
+                step++;
+            }, 250);
+        }
+
+        function stopBGM() {
+            if (bgmInterval) {
+                clearInterval(bgmInterval);
+                bgmInterval = null;
+            }
+        }
+
+        function playClickSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.08);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.09);
+        }
+
+        function playBatterySound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15);
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.19);
+        }
+
+        function playCrashSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.25);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.31);
+        }
+
+        window.addEventListener('pointerdown', (e) => {
+            if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+
+            if (gameState === 'PLAYING') {
+                inputDirection *= -1;
+                playClickSound();
+            }
+        });
+
+        function updateHpDisplay() {
+            let hearts = '';
+            for (let i = 0; i < hp; i++) hearts += '❤️';
+            document.getElementById('hpVal').innerText = hearts;
+        }
+
+        function runCountdown(callback) {
+            gameState = 'COUNTDOWN';
+            const overlay = document.getElementById('countdownOverlay');
+            const textEl = document.getElementById('countdownText');
+            overlay.classList.remove('hidden');
+
+            let count = 3;
+            textEl.innerText = count;
+
+            const timer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    textEl.innerText = count;
+                } else if (count === 0) {
+                    textEl.innerText = "GO!";
+                } else {
+                    clearInterval(timer);
+                    overlay.classList.add('hidden');
+                    callback();
+                }
+            }, 800);
+        }
+
+        function resetVariablesForNewGame() {
+            score = 0;
+            hp = 3;
+            updateHpDisplay();
+            meteors = [];
+            energyCells = [];
+            floatTexts = [];
+            frameCount = 0;
+            drone.angle = 0;
+            drone.speed = drone.baseSpeed;
+            inputDirection = 1;
+            hasRevived = false;
+            invulnerableTimer = 0;
+            pausedTimeElapsed = 0;
+            document.getElementById('scoreVal').innerText = '0';
+            document.getElementById('timerVal').innerText = '0';
+        }
+
+        function startCountdownAndGame() {
+            if (window.PokiSDK) {
+                PokiSDK.gameLoadingFinished();
+                PokiSDK.commercialBreak().then(() => {}).catch(() => {});
+            }
+            document.getElementById('startScreen').classList.add('hidden');
+            resetVariablesForNewGame();
+
+            runCountdown(() => {
+                gameStartTime = Date.now();
+                gameState = 'PLAYING';
+                startBGM();
+                loop();
+            });
+        }
+
+        function restartGame() {
+            if (window.PokiSDK) {
+                PokiSDK.commercialBreak().then(() => {
+                    executeRestart();
+                }).catch(() => {
+                    executeRestart();
+                });
+            } else {
+                executeRestart();
+            }
+        }
+
+        function executeRestart() {
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            resetVariablesForNewGame();
+
+            runCountdown(() => {
+                gameStartTime = Date.now();
+                gameState = 'PLAYING';
+                startBGM();
+                loop();
+            });
+        }
+
+        function gameOver() {
+            gameState = 'GAMEOVER';
+            stopBGM();
+            const finalScoreVal = Math.floor(score);
+            const finalTimeVal = pausedTimeElapsed;
+            
+            if (finalScoreVal > highData.score || (finalScoreVal === highData.score && finalTimeVal > highData.time)) {
+                highData = { score: finalScoreVal, time: finalTimeVal };
+                localStorage.setItem('stellarDrift_highData', JSON.stringify(highData));
+            }
+
+            document.getElementById('finalScore').innerText = finalScoreVal;
+            document.getElementById('finalTime').innerText = finalTimeVal + 's';
+            document.getElementById('highScoreText').innerText = `Score: ${highData.score} (${highData.time}s)`;
+            
+            const reviveBtn = document.getElementById('reviveBtn');
+            if (hasRevived) {
+                reviveBtn.classList.add('hidden');
+            } else {
+                reviveBtn.classList.remove('hidden');
+            }
+
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+
+            if (window.PokiSDK) {
+                PokiSDK.happyTime();
+            }
+        }
+
+        function watchAdToRevive() {
+            if (window.PokiSDK) {
+                PokiSDK.rewardedBreak().then((success) => {
+                    if (success) {
+                        executeRevive();
+                    }
+                }).catch(() => {
+                    executeRevive();
+                });
+            } else {
+                executeRevive();
+            }
+        }
+
+        function executeRevive() {
+            hasRevived = true;
+            hp = 1;
+            updateHpDisplay();
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            meteors = [];
+            energyCells = [];
+            invulnerableTimer = 60;
+
+            runCountdown(() => {
+                gameStartTime = Date.now() - (pausedTimeElapsed * 1000);
+                gameState = 'PLAYING';
+                startBGM();
+                loop();
+            });
+        }
+
+        function spawnMeteor() {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 1.1 + Math.random() * 0.4 + (score / 1500);
+            meteors.push({
+                x: canvas.width / 2 + Math.cos(angle) * (Math.max(canvas.width, canvas.height) * 0.6),
+                y: canvas.height / 2 + Math.sin(angle) * (Math.max(canvas.width, canvas.height) * 0.6),
+                targetX: canvas.width / 2,
+                targetY: canvas.height / 2,
+                speed: speed,
+                size: 24,
+                rotation: Math.random() * Math.PI
+            });
+        }
+
+        function spawnEnergyCell() {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 1.2 + Math.random() * 0.4;
+            energyCells.push({
+                x: canvas.width / 2 + Math.cos(angle) * (Math.max(canvas.width, canvas.height) * 0.6),
+                y: canvas.height / 2 + Math.sin(angle) * (Math.max(canvas.width, canvas.height) * 0.6),
+                targetX: canvas.width / 2,
+                targetY: canvas.height / 2,
+                speed: speed,
+                width: 18,
+                height: 36
+            });
+        }
+
+        function loop() {
+            if (gameState !== 'PLAYING') return;
+
+            frameCount++;
+            score += 0.1;
+
+            if (invulnerableTimer > 0) invulnerableTimer--;
+
+            pausedTimeElapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+            const elapsedSeconds = Math.min(60, pausedTimeElapsed);
+            
+            document.getElementById('scoreVal').innerText = Math.floor(score);
+            document.getElementById('timerVal').innerText = pausedTimeElapsed;
+
+            const speedIncreases = Math.min(5, Math.floor(elapsedSeconds / 10));
+            drone.speed = drone.baseSpeed + (speedIncreases * 0.004);
+
+            if (elapsedSeconds < 10) {
+                if (frameCount % 200 === 0) {
+                    spawnMeteor();
+                }
+            } else {
+                let spawnInterval = Math.max(50, 110 - Math.floor(elapsedSeconds));
+                if (frameCount % spawnInterval === 0) {
+                    spawnMeteor();
+                }
+            }
+
+            if (frameCount % 500 === 0) {
+                spawnEnergyCell();
+            }
+
+            drone.angle += drone.speed * inputDirection;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, drone.radius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            const droneX = centerX + Math.cos(drone.angle) * drone.radius;
+            const droneY = centerY + Math.sin(drone.angle) * drone.radius;
+
+            for (let i = energyCells.length - 1; i >= 0; i--) {
+                let cell = energyCells[i];
+                let dx = cell.targetX - cell.x;
+                let dy = cell.targetY - cell.y;
+                let dist = Math.hypot(dx, dy);
+
+                cell.x += (dx / dist) * cell.speed;
+                cell.y += (dy / dist) * cell.speed;
+
+                if (batteryImg.complete && batteryImg.naturalWidth !== 0) {
+                    ctx.drawImage(batteryImg, cell.x - cell.width / 2, cell.y - cell.height / 2, cell.width, cell.height);
+                } else {
+                    ctx.fillStyle = '#22c55e';
+                    ctx.fillRect(cell.x - cell.width / 2, cell.y - cell.height / 2, cell.width, cell.height);
+                }
+
+                let eatDist = Math.hypot(droneX - cell.x, droneY - cell.y);
+                if (eatDist < drone.size + Math.max(cell.width, cell.height) / 2) {
+                    score += 50;
+                    playBatterySound();
+                    
+                    floatTexts.push({
+                        text: '+50',
+                        x: droneX,
+                        y: droneY,
+                        alpha: 1.0,
+                        vy: -1.2
+                    });
+
+                    energyCells.splice(i, 1);
+                    continue;
+                }
+
+                if (dist < 10) {
+                    energyCells.splice(i, 1);
+                }
+            }
+
+            for (let i = floatTexts.length - 1; i >= 0; i--) {
+                let ft = floatTexts[i];
+                ft.y += ft.vy;
+                ft.alpha -= 0.015;
+
+                if (ft.alpha <= 0) {
+                    floatTexts.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = ft.alpha;
+                ctx.fillStyle = '#22c55e';
+                ctx.font = '700 14px "Press Start 2P", monospace';
+                ctx.fillText(ft.text, ft.x - 12, ft.y);
+                ctx.restore();
+            }
+
+            let isVisible = true;
+            if (invulnerableTimer > 0 && Math.floor(frameCount / 4) % 2 === 0) {
+                isVisible = false;
+            }
+
+            if (isVisible) {
+                ctx.save();
+                if (spacemanImg.complete && spacemanImg.naturalWidth !== 0) {
+                    ctx.drawImage(spacemanImg, droneX - 20, droneY - 20, 40, 40);
+                } else {
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.beginPath();
+                    ctx.arc(droneX, droneY, drone.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            for (let i = meteors.length - 1; i >= 0; i--) {
+                let meteor = meteors[i];
+                let dx = meteor.targetX - meteor.x;
+                let dy = meteor.targetY - meteor.y;
+                let dist = Math.hypot(dx, dy);
+
+                meteor.x += (dx / dist) * meteor.speed;
+                meteor.y += (dy / dist) * meteor.speed;
+                meteor.rotation += 0.02;
+
+                ctx.save();
+                ctx.translate(meteor.x, meteor.y);
+                ctx.rotate(meteor.rotation);
+
+                if (meteorImg.complete && meteorImg.naturalWidth !== 0) {
+                    ctx.drawImage(meteorImg, -meteor.size, -meteor.size, meteor.size * 2, meteor.size * 2);
+                } else {
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, meteor.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+
+                let hitDist = Math.hypot(droneX - meteor.x, droneY - meteor.y);
+                if (hitDist < drone.size + meteor.size) {
+                    if (invulnerableTimer === 0) {
+                        hp--;
+                        updateHpDisplay();
+                        playCrashSound();
+                        meteors.splice(i, 1);
+
+                        if (hp <= 0) {
+                            gameOver();
+                            return;
+                        } else {
+                            invulnerableTimer = 60;
+                        }
+                    }
+                    continue;
+                }
+
+                if (dist < 10) {
+                    meteors.splice(i, 1);
+                }
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        window.addEventListener('load', () => {
+            if (window.PokiSDK) {
+                PokiSDK.init().then(() => {}).catch(() => {});
+            }
+        });
+    </script>
+</body>
+</html>
