@@ -314,6 +314,7 @@
         let lastFrameTime = null;
         let nextMeteorFrame = 80;
         let nextEnergyCellFrame = 500;
+        let backgroundGameInterval = null;
 
         let highData = JSON.parse(localStorage.getItem('stellarDrift_highData')) || { score: 0, time: 0 };
 
@@ -535,6 +536,10 @@
 
         function gameOver() {
             gameState = 'GAMEOVER';
+            if (backgroundGameInterval !== null) {
+                clearInterval(backgroundGameInterval);
+                backgroundGameInterval = null;
+            }
             stopBGM();
             const finalScoreVal = Math.floor(score);
             const finalTimeVal = pausedTimeElapsed;
@@ -798,12 +803,30 @@
                 }
             }
 
-            requestAnimationFrame(loop);
+            if (!document.hidden) {
+                requestAnimationFrame(loop);
+            }
         }
 
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                lastFrameTime = null;
+                lastFrameTime = performance.now();
+                if (gameState === 'PLAYING' && backgroundGameInterval === null) {
+                    backgroundGameInterval = setInterval(() => {
+                        if (gameState === 'PLAYING') {
+                            loop(performance.now());
+                        }
+                    }, 100);
+                }
+            } else {
+                if (backgroundGameInterval !== null) {
+                    clearInterval(backgroundGameInterval);
+                    backgroundGameInterval = null;
+                }
+                lastFrameTime = performance.now();
+                if (gameState === 'PLAYING') {
+                    requestAnimationFrame(loop);
+                }
             }
         });
 
