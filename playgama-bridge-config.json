@@ -1,11 +1,1 @@
-{
-  "advertisement": {
-    "minimumDelayBetweenInterstitial": 60,
-    "interstitial": {
-      "placementFallback": "level_completed"
-    },
-    "rewarded": {
-      "placementFallback": "extra_life"
-    }
-  }
-}
+{"advertisement":{"banner":{"placementFallback":"main_menu"},"interstitial":{"placementFallback":"level_completed"},"minimumDelayBetweenInterstitial":60,"rewarded":{"placementFallback":"extra_life"}}}

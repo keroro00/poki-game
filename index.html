@@ -236,6 +236,7 @@
     <div id="ui-layer">
         <div class="hud-left">
             <div class="hud-group">Score <span id="scoreVal" style="color: #38bdf8;">0</span></div>
+            <div class="hud-group">Level <span id="levelVal" style="color: #38bdf8;">1</span></div>
             <div class="hud-sub" id="hpVal">❤️❤️❤️</div>
         </div>
         <div class="hud-group" style="font-size: 0.75rem;">
@@ -279,6 +280,7 @@
         <button id="reviveBtn" class="btn btn-revive" onclick="watchAdToRevive()">Continue <svg width="18" height="18" viewBox="0 0 640 640" xmlns="http://www.w3.org/2000/svg" style="margin-right: 6px;">
                 <path d="M128 128C92.7 128 64 156.7 64 192L64 448C64 483.3 92.7 512 128 512L384 512C419.3 512 448 483.3 448 448L448 192C448 156.7 419.3 128 384 128L128 128zM496 400L569.5 458.8C573.7 462.2 578.9 464 584.3 464C597.4 464 608 453.4 608 440.3L608 199.7C608 186.6 597.4 176 584.3 176C578.9 176 573.7 177.8 569.5 181.2L496 240L496 400z"/>
             </svg></button>
+        <div id="adMsg" class="hidden" style="font-size: 0.55rem; color: #fda4af; margin-top: 12px; line-height: 1.5;"></div>
         <button class="btn" onclick="restartGame()" style="width: auto; margin-top: 12px; background: #334155; font-size: 0.75rem;">Play Again</button>
         <div style="font-size: 0.55rem; color: #64748b; margin-top: 12px;">Continue is once per run</div>
     </div>
@@ -325,8 +327,13 @@
         let nextMeteorFrame = 80;
         let nextEnergyCellFrame = 500;
         let countdownTimer = null;
+        let currentLevel = 1;
 
-        let highData = JSON.parse(localStorage.getItem('stellarDrift_highData')) || { score: 0, time: 0 };
+        let highData = { score: 0, time: 0 };
+        try {
+            const saved = localStorage.getItem('stellarDrift_highData');
+            if (saved) highData = JSON.parse(saved) || highData;
+        } catch (e) {}
 
         // ---- Playgama Bridge helpers ----
         // Bridge is optional outside Playgama: every call is guarded, so the
@@ -367,6 +374,23 @@
                 if (bridgeReady && window.bridge && window.bridge.platform) window.bridge.platform.sendMessage(msg);
             } catch (e) {}
         }
+        function showMenuBanner() {
+            // Banner is NOT supported on playgama itself (only partner
+            // portals like CrazyGames/MSN/Yandex), so this is a safe no-op
+            // on Playgama and extra passive revenue where it is supported.
+            try {
+                if (bridgeReady && window.bridge && window.bridge.advertisement && window.bridge.advertisement.isBannerSupported) {
+                    window.bridge.advertisement.showBanner('bottom', 'main_menu');
+                }
+            } catch (e) {}
+        }
+        function hideMenuBanner() {
+            try {
+                if (bridgeReady && window.bridge && window.bridge.advertisement && window.bridge.advertisement.hideBanner) {
+                    window.bridge.advertisement.hideBanner();
+                }
+            } catch (e) {}
+        }
         function showPlaygamaInterstitial() {
             try {
                 if (bridgeReady && window.bridge && window.bridge.advertisement && window.bridge.advertisement.isInterstitialSupported) {
@@ -393,11 +417,23 @@
                     if (window.bridge.advertisement && typeof window.bridge.advertisement.on === 'function' && window.bridge.EVENT_NAME) {
                         window.bridge.advertisement.on(window.bridge.EVENT_NAME.REWARDED_STATE_CHANGED, function (state) {
                             if (state === 'rewarded' && reviveRequested) { reviveRequested = false; executeRevive(); }
-                            else if (state === 'closed' || state === 'failed') reviveRequested = false;
+                            else if ((state === 'closed' || state === 'failed') && reviveRequested) {
+                                reviveRequested = false;
+                                const msg = document.getElementById('adMsg');
+                                if (msg) { msg.innerText = 'Ad did not finish loading or was not watched to the end, so no revive this time.'; msg.classList.remove('hidden'); }
+                            }
                         });
                     }
                 } catch (e) {}
                 loadHighScore();
+                try {
+                    const lang = window.bridge.platform && window.bridge.platform.language ? String(window.bridge.platform.language).toLowerCase() : '';
+                    if (lang.startsWith('zh')) {
+                        const tut = document.querySelector('#startScreen .tutorial-text');
+                        if (tut) tut.innerText = '撳任何地方轉換軌道，避開隕石';
+                    }
+                } catch (e) {}
+                showMenuBanner();
                 if (!gameReadySent) { gameReadySent = true; sendPlatformMessage('game_ready'); }
             }).catch(function () {});
         }
@@ -424,11 +460,13 @@
             pauseReason = reason || 'user';
             stopBGM();
             document.getElementById('pauseScreen').classList.remove('hidden');
+            showMenuBanner();
             sendPlatformMessage('level_paused');
         }
         function resumeGame() {
             if (gameState !== 'PAUSED') return;
             document.getElementById('pauseScreen').classList.add('hidden');
+            hideMenuBanner();
             gameState = 'PLAYING';
             pauseReason = null;
             startBGM();
@@ -608,9 +646,14 @@
             reviveRequested = false;
             document.getElementById('scoreVal').innerText = '0';
             document.getElementById('timerVal').innerText = '0';
+            document.getElementById('levelVal').innerText = '1';
+            currentLevel = 1;
+            const adMsgEl = document.getElementById('adMsg');
+            if (adMsgEl) adMsgEl.classList.add('hidden');
         }
 
         function startCountdownAndGame() {
+            hideMenuBanner();
             document.getElementById('startScreen').classList.add('hidden');
             resetVariablesForNewGame();
 
@@ -628,6 +671,7 @@
         }
 
         function executeRestart() {
+            hideMenuBanner();
             document.getElementById('gameOverScreen').classList.add('hidden');
             resetVariablesForNewGame();
 
@@ -662,6 +706,7 @@
             }
 
             document.getElementById('gameOverScreen').classList.remove('hidden');
+            showMenuBanner();
             showPlaygamaInterstitial();
             sendPlatformMessage('level_failed');
         }
@@ -681,6 +726,7 @@
         }
 
         function executeRevive() {
+            hideMenuBanner();
             reviveRequested = false;
             hasRevived = true;
             hp = 1;
@@ -752,6 +798,13 @@
             
             document.getElementById('scoreVal').innerText = Math.floor(score);
             document.getElementById('timerVal').innerText = pausedTimeElapsed;
+            const newLevel = Math.floor(pausedTimeElapsed / 20) + 1;
+            if (newLevel > currentLevel) {
+                currentLevel = newLevel;
+                score += 100;
+                document.getElementById('levelVal').innerText = String(currentLevel);
+                floatTexts.push({ text: '+100 Level ' + currentLevel, x: canvas.width / 2, y: canvas.height / 2 - 60, alpha: 1.0, vy: -1.0 });
+            }
 
             const speedIncreases = Math.min(5, Math.floor(elapsedSeconds / 10));
             drone.speed = drone.baseSpeed + (speedIncreases * 0.004);
@@ -771,7 +824,7 @@
 
             if (frameCount >= nextEnergyCellFrame) {
                 spawnEnergyCell();
-                nextEnergyCellFrame = frameCount + 500;
+                nextEnergyCellFrame = frameCount + 400;
             }
 
             drone.angle += drone.speed * inputDirection * deltaFrames;
